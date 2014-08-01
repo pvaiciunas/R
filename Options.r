@@ -320,7 +320,7 @@ CalcVeta <- function(stockPrice, strikePrice, yearsToExpiration,
 # Veta is a second order derivative of option value; once to volatility and once to time.
 # AKA DvegaDtime.
 # Measures the rate of change in Vega with respect to the passage of time.
-# This version is divided by 100 * # of days per year to give the output the form: percentage
+# This version is divided by # of days per year to give the output the form: 
 # change in Vega per one day.
 #
 # Args:
@@ -337,7 +337,7 @@ CalcVeta <- function(stockPrice, strikePrice, yearsToExpiration,
 		((riskFreeRate - costOfCarry) + (costOfCarry * tempD1) / (annVolatility * sqrt(yearsToExpiration)) - 
 		((1 + tempD1 * tempD2) / 2 * yearsToExpiration))
 	
-	veta / (100*365)	
+	veta / (365)	
 }
 
 
@@ -556,14 +556,14 @@ ExtractOpExpiry <- function(optionCode) {
 
 
 # Option Data Frame
-OptionList <- function(ticker, riskFreeRate, costOfCarry, strikeWindow = 0.25) {
+OptionDF <- function(optionChain, stockPrice, riskFreeRate, costOfCarry, strikeWindow = 0.25) {
 #
-# Transforms the list returned by the quantmod getOptionChain() function by reducing
+# Transforms a list object returned by the quantmod getOptionChain() function by reducing
 # the number of strikes to a more relevant window, and adding the implied volatilities
 # for the bid and ask prices of each option
 #
 # Args:
-#	Ticker: a string with a single ticker
+#	optionChain: a list object returned from getOptionChain() function in quantmod package
 #	riskFreeRate: the risk free rate. Currently a single number. Will eventually automate this
 #	costOfCarry: see CalcOptionPrice for more details
 #	strikeWindow: the +/- percentage range around the current stock price you want the 
@@ -575,51 +575,45 @@ OptionList <- function(ticker, riskFreeRate, costOfCarry, strikeWindow = 0.25) {
 #	all currently available options.
 
 
-	optionPrices <- getOptionChain(ticker, Exp = NULL)
+	ticker <- optionChain[[1]]$symbol
 	optionDF <- data.frame()
-	stockPrice <- getQuote(ticker)$Last
 	#Determine upper and lower bounds of the strike prices you want to look at
 	strikeUB <- stockPrice * (1 + strikeWindow)
 	strikeLB <- stockPrice * (1 - strikeWindow)
-
-	for (i in (1:length(names(optionPrices)))) {
+	
+	#Loop through the expiraiton months (the 'names' of the chain)
+	for (i in (1:length(names(optionChain)))) {
 		#define the parts of the full option chain you'll be using
-		calls <- optionPrices[[i]]$calls[optionPrices[[i]]$calls$Strike >= strikeLB & 
-									     optionPrices[[i]]$calls$Strike <= strikeUB,]
-		puts <- optionPrices[[i]]$puts[optionPrices[[i]]$puts$Strike >= strikeLB & 
-									   optionPrices[[i]]$puts$Strike <= strikeUB,]
-		fullChain = rbind(calls, puts)
+		calls <- optionChain[[i]]$calls[optionChain[[i]]$calls$Strike >= strikeLB & 
+									     optionChain[[i]]$calls$Strike <= strikeUB,]
+		puts <- optionChain[[i]]$puts[optionChain[[i]]$puts$Strike >= strikeLB & 
+									   optionChain[[i]]$puts$Strike <= strikeUB,]
+		slimChain = rbind(calls, puts)
 		
 		#pull relevant data from the option codes	
-		optionCodeData <- SplitOptionCode(rownames(fullChain))
+		optionCodeData <- SplitOptionCode(rownames(slimChain))
 		
 		#calculate the implied vols for bids and asks
-		Bid.IVol <- NULL
-		Ask.IVol <- NULL
-		for (i in (1:nrow(fullChain))) {
-			tempBidVol <- CalcImpVol(fullChain$Bid[i], stockPrice, fullChain$Strike[i],
-					      optionCodeData$YearsToExpiry[i], riskFreeRate, costOfCarry, 
-					      optionCodeData$Type[i])
-			Bid.IVol <- c(Bid.IVol, tempBidVol)
-			
-			tempAskVol <- CalcImpVol(fullChain$Ask[i], stockPrice, fullChain$Strike[i],
-					      optionCodeData$YearsToExpiry[i], riskFreeRate, costOfCarry, 
-					      optionCodeData$Type[i])
-			Ask.IVol <- c(Ask.IVol, tempAskVol)
-		}
-		
+		Bid.IVol <- mapply(CalcImpVol,slimChain$Bid, stockPrice, slimChain$Strike,
+					      optionCodeData$yearsToExpiry, riskFreeRate, costOfCarry, 
+					      optionCodeData$type) 
+		Ask.IVol <- mapply(CalcImpVol,slimChain$Ask, stockPrice, slimChain$Strike,
+					      optionCodeData$yearsToExpiry, riskFreeRate, costOfCarry, 
+					      optionCodeData$type)
+					
 		#throw everything together
-		combinedData <- cbind(optionCodeData,
-							  "Bid" = fullChain$Bid,
-							  "Ask" = fullChain$Ask, 
-							  "Bid.IVol" = round(Bid.IVol,6), 
-							  "Ask.IVol" = round(Ask.IVol,6))
+		combinedData <- cbind("optionCode" = rownames(slimChain),
+							  optionCodeData,
+							  "bid" = slimChain$Bid,
+							  "ask" = slimChain$Ask, 
+							  "bid.IVol" = round(Bid.IVol,6), 
+							  "ask.IVol" = round(Ask.IVol,6))
 		
 		optionDF <- rbind(optionDF, combinedData)
 	}
 	
 	#sort the output by expiry, then option type, then strike
-	optionDF <- optionDF[order(optionDF$Expiry, optionDF$Type, optionDF$Strike),]
+	optionDF <- optionDF[order(optionDF$expiry, optionDF$type, optionDF$strike),]
 	rownames(optionDF) <- seq(1:nrow(optionDF))
 	optionDF <- cbind(optionDF, stockPrice)
 	optionDF
@@ -659,12 +653,12 @@ SplitOptionCode <- function(optionCode) {
 				as.integer(substr(codeNumbers,12,13)) / 100
 		
 	codeResults <- data.frame(
-		Ticker = ticker,
-		Type = callOrPut,
-		MiniOption = miniOptionFlag,
-		Expiry = expirationDate,
-		YearsToExpiry = yearsToExpiry,
-		Strike = strike
+		ticker = ticker,
+		type = callOrPut,
+		miniOption = miniOptionFlag,
+		expiry = expirationDate,
+		yearsToExpiry = yearsToExpiry,
+		strike = strike
 		)
 		
 	codeResults
@@ -688,3 +682,22 @@ OptionPayoff <- function(stockPrice, strikePrice, optionType) {
 	
 	ifelse(optionType == 'call', max((stockPrice - strikePrice), 0), max((strikePrice - stockPrice), 0))
 }
+
+# Make the output from quantmod's getOptionChain() more useable
+UnlistChain <- function(optionList) {
+#
+# Converts the list object from getOptionChain into a simple data frame.
+#
+# Args:
+#	optionList: output from getOptionChain() function
+#
+# Returns:
+#	A data frame with option codes as row names, and the bid and ask prices
+
+	chainDF <- unlist(optionList, recursive = FALSE, use.names = FALSE) #remove one list dimension (there are 2)
+	chainDF <- chainDF[lapply(chainDF, is.character)==FALSE] #remove the elements of the list with ticker name
+	chainDF <- do.call(rbind,chainDF) #combine all elements of list into dataframe
+	chainDF <- chainDF[,c("Bid", "Ask")] #just choose the bid/ask prices
+	chainDF
+}	
+
