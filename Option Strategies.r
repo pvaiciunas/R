@@ -1,37 +1,58 @@
 
+
 BullCSpread <- function(OptionDF) {
-#
-# Buy 1 ITM Call
-# Sell 1 OTM Call
-#
-# Try to maximize spread between upside to downside, as well as where relative
-# to the underlying price these domains exist
-#
-# Input is a full OptionDF object
-
-# Clean up data and split the data frame into separate months
-stockPrice <- OptionDF$stockPrice[1]
-allCallOptions <- OptionDF[OptionDF$type == 'call',]
-splitDF <- split(allCallOptions, allCallOptions$expiry)
-
-for each ITM call, create all potential spreads (Should be # of ITM options ^2)
-i = 1
-for (i in 1:length(splitDF)) {
-	
-	ITM <- which(splitDF[[i]]$strike <= stockPrice)
-	OTM <- which(splitDF[[i]]$strike > stockPrice)
-	
-	
-while ($strike in DF) {
-	
-
-
-
-Of these, rank them based on a few metrics you need to decide on
-Also include data on total price and payoff stats
-bullCSpreadDF <- 
-
-
+  #
+  # Buy 1 ITM Call
+  # Sell 1 OTM Call
+  #
+  # Try to maximize spread between upside to downside, as well as where relative
+  # to the underlying price these domains exist
+  #
+  # Input is a full OptionDF object
+  
+  # Clean up data and split the data frame into separate months
+  stockPrice <- OptionDF$stockPrice[1]
+  callOptions <- OptionDF[OptionDF$type == 'call',]
+  splitDF <- split(callOptions, callOptions$expiry)
+  
+  # create a pre-allocated list and an empty DF that will eventually be output
+  outputList <- vector("list",length(splitDF))
+  names(outputList) <- names(splitDF)
+  
+  # Loop through the option tenors
+  for (i in 1:length(splitDF)) {
+    
+    # create a separate data frame for ITM and OTM options
+    tempDF <- splitDF[[i]]
+    ITM <- tempDF[tempDF$strike <= tempDF$stockPrice,]
+    OTM <- tempDF[tempDF$strike > tempDF$stockPrice,]  
+    
+    # create empty data frame  
+    outputDF <- data.frame()
+    
+    # Loop through the ITM options, and compare to all OTM options
+    # Append to the empty outputDF data frame post-loop
+    for (j in 1:nrow(ITM)) {
+      loopDF <- data.frame(maxProfit = (OTM$strike - ITM$strike[j] - ITM$ask[j]),
+                           maxLoss = OTM$bid - ITM$ask[j],
+                           ITMstrike = ITM$strike[j],
+                           OTMstrike = OTM$strike,
+                           stockPrice = stockPrice,
+                           buyPx = ITM$ask[j], 
+                           sellPx = OTM$bid,
+                           ITMoptionCode = rep(ITM$optionCode[j], nrow(OTM)),
+                           OTMoptionCode = OTM$optionCode)
+      
+      outputDF <- rbind(outputDF, loopDF)
+    }  				
+    
+    #cleanup the resulting data frame, and add to the outputList
+    outputDF <- outputDF[order(outputDF$maxProfit, outputDF$maxLoss, decreasing = TRUE),]
+    outputDF <- na.omit(outputDF)
+    outputList[[i]] <- outputDF
+  }
+  
+  outputList
 }
 
 
