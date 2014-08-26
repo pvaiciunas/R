@@ -8,8 +8,7 @@
 # and a list of options to sell
 
 
-
-BullCSpread <- function(OptionDF) {
+BullCallSpread <- function(OptionDF) {
 #
 # Buy 1 ITM Call
 # Sell 1 OTM Call
@@ -18,29 +17,31 @@ BullCSpread <- function(OptionDF) {
 # Output is a data.frame containing a list of tickers to buy and sell
 
 # Clean up data and split the data frame into separate months
-stockPrice <- OptionDF$stockPrice[1]
-allCallOptions <- OptionDF[OptionDF$type == 'call',]
-splitDF <- split(allCallOptions, allCallOptions$expiry)
-
-output <- data.frame()
-
-#for each ITM call, create all potential spreads (Should be # of ITM options ^2)
-for (i in 1:length(splitDF)) {
-	
-	ITMOptions <- splitDF[[i]][splitDF[[i]]$strike <= stockPrice,]$optionCode
-	OTMOptions <- splitDF[[i]][splitDF[[i]]$strike > stockPrice,]$optionCode
-	
-	possibleCombos <- expand.grid(ITMOptions, OTMOptions)
-	
-	possibleCombosLists <- dataframe(I(split(possibleCombos[,1], rownames(possibleCombos))),
-									 I(split(possibleCombos[,2], rownames(possibleCombos))))
-										
-	output <- rbind(output, possibleCombosLists)
-	
-}
-	
-names(output) <- c("buy","sell")
-
+	stockPrice <- OptionDF$stockPrice[1]
+	allCallOptions <- OptionDF[OptionDF$type == 'call',]
+	splitDF <- split(allCallOptions, allCallOptions$expiry)
+  
+	output <- data.frame()
+  
+  #for each ITM call, create all potential spreads inter-month
+	for (i in 1:length(splitDF)) {
+    
+		ITMOptions <- splitDF[[i]][splitDF[[i]]$strike <= stockPrice,]$optionCode
+		OTMOptions <- splitDF[[i]][splitDF[[i]]$strike > stockPrice,]$optionCode
+    
+		possibleCombos <- expand.grid(ITMOptions, OTMOptions)
+    
+    possibleCombosLists <- data.frame(I(split(possibleCombos[,1], rownames(possibleCombos))),
+                                     I(split(possibleCombos[,2], rownames(possibleCombos))))
+    
+    output <- rbind(output, possibleCombosLists)
+    
+  }
+  
+  names(output) <- c("buy","sell")
+  rownames(output) <- 1:nrow(output)
+  output
+  
 }
 
 
