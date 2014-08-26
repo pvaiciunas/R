@@ -1,38 +1,49 @@
 
+# These functions should create all combinations of options tickers
+# That constitute the strategy. Another function should follow to 
+# take these lists of strategies and calcualte all other necessary info.
+# (i.e. payoffs, costs, exposures to greeks, etc)
+# Input is an option DF
+# Output is a 2 column data frame containing a list of options to buy
+# and a list of options to sell
+
+
+
 BullCSpread <- function(OptionDF) {
 #
 # Buy 1 ITM Call
 # Sell 1 OTM Call
 #
-# Try to maximize spread between upside to downside, as well as where relative
-# to the underlying price these domains exist
-#
 # Input is a full OptionDF object
+# Output is a data.frame containing a list of tickers to buy and sell
 
 # Clean up data and split the data frame into separate months
 stockPrice <- OptionDF$stockPrice[1]
 allCallOptions <- OptionDF[OptionDF$type == 'call',]
 splitDF <- split(allCallOptions, allCallOptions$expiry)
 
-for each ITM call, create all potential spreads (Should be # of ITM options ^2)
-i = 1
+output <- data.frame()
+
+#for each ITM call, create all potential spreads (Should be # of ITM options ^2)
 for (i in 1:length(splitDF)) {
 	
-	ITM <- which(splitDF[[i]]$strike <= stockPrice)
-	OTM <- which(splitDF[[i]]$strike > stockPrice)
+	ITMOptions <- splitDF[[i]][splitDF[[i]]$strike <= stockPrice,]$optionCode
+	OTMOptions <- splitDF[[i]][splitDF[[i]]$strike > stockPrice,]$optionCode
 	
+	possibleCombos <- expand.grid(ITMOptions, OTMOptions)
 	
-while ($strike in DF) {
+	possibleCombosLists <- dataframe(I(split(possibleCombos[,1], rownames(possibleCombos))),
+									 I(split(possibleCombos[,2], rownames(possibleCombos))))
+										
+	output <- rbind(output, possibleCombosLists)
 	
-
-
-
-Of these, rank them based on a few metrics you need to decide on
-Also include data on total price and payoff stats
-bullCSpreadDF <- 
-
+}
+	
+names(output) <- c("buy","sell")
 
 }
+
+
 
 
 # Bear Call Spread
